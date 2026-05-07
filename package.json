@@ -1,0 +1,34 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "nodekill",
+  "title": "NodeKill",
+  "description": "Find and stop localhost development servers on Windows.",
+  "icon": "extension-icon.png",
+  "author": "jrud25",
+  "license": "MIT",
+  "commands": [
+    {
+      "name": "index",
+      "title": "Find Localhost Servers",
+      "description": "List and kill active localhost development servers on Windows",
+      "mode": "view"
+    }
+  ],
+  "scripts": {
+    "build": "ray build -e dist",
+    "dev": "ray develop",
+    "fix-lint": "ray lint --fix",
+    "lint": "ray lint",
+    "publish": "ray publish"
+  },
+  "dependencies": {
+    "@raycast/api": "^1.83.2"
+  },
+  "devDependencies": {
+    "@raycast/eslint-config": "^1.0.11",
+    "@types/node": "^22.10.2",
+    "eslint": "^8.57.1",
+    "prettier": "^3.8.3",
+    "typescript": "5.3.3"
+  }
+}
