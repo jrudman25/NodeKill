@@ -2,5 +2,7 @@ node_modules/
 .vscode/
 .windsurf/
 .agents/
+dist/
+.raycast/
 *.md
 !README.md
