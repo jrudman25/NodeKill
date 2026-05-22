@@ -29,16 +29,6 @@ $connections | ForEach-Object {
 } | ConvertTo-Json -Depth 4
 `;
 
-const KILL_SCRIPT = String.raw`
-param([int]$ProcessId)
-$ErrorActionPreference = "Stop"
-$process = Get-CimInstance Win32_Process -Filter "ProcessId = $ProcessId"
-if (-not $process) {
-  throw "Process $ProcessId is no longer running."
-}
-Stop-Process -Id $ProcessId -Force
-`;
-
 const DEVELOPMENT_PROCESS_NAMES = new Set([
   "node.exe",
   "npm.exe",
@@ -119,7 +109,16 @@ export async function findLocalhostServers(): Promise<LocalhostServer[]> {
 }
 
 export async function killProcess(pid: number): Promise<void> {
-  await execPowerShell(KILL_SCRIPT, ["-ProcessId", String(pid)]);
+  const script = String.raw`
+$ErrorActionPreference = "Stop"
+$ProcessId = ${pid}
+$process = Get-CimInstance Win32_Process -Filter "ProcessId = $ProcessId"
+if (-not $process) {
+  throw "Process $ProcessId is no longer running."
+}
+Stop-Process -Id $ProcessId -Force
+`;
+  await execPowerShell(script);
 }
 
 function parsePowerShellJson<T>(stdout: string): T[] {

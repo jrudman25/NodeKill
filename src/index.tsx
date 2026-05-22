@@ -11,6 +11,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import type { LocalhostServer } from "./types";
 import { findLocalhostServers, killProcess } from "./windowsProcesses";
+import { version } from "../package.json";
 
 export default function Command() {
   const [servers, setServers] = useState<LocalhostServer[]>([]);
@@ -45,6 +46,7 @@ export default function Command() {
     const confirmed = await confirmAlert({
       title: `Kill ${server.label}?`,
       message: `This will force stop PID ${server.pid} listening on port ${server.port}.`,
+      icon: Icon.XMarkCircle,
       primaryAction: {
         title: "Kill Process",
         style: Alert.ActionStyle.Destructive,
@@ -90,6 +92,7 @@ export default function Command() {
     const confirmed = await confirmAlert({
       title: "Kill all listed servers?",
       message: `This will force stop ${uniqueServersByPid.length} process${uniqueServersByPid.length === 1 ? "" : "es"}.`,
+      icon: Icon.XMarkCircle,
       primaryAction: {
         title: "Kill All",
         style: Alert.ActionStyle.Destructive,
@@ -137,6 +140,7 @@ export default function Command() {
   return (
     <List
       isLoading={isLoading}
+      navigationTitle={`NodeKill v${version}`}
       searchBarPlaceholder="Search by port, process, PID, or command"
       actions={
         <ActionPanel>
