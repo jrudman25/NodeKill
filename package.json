@@ -3,8 +3,8 @@
   "name": "nodekill",
   "title": "NodeKill",
   "description": "Find and stop localhost development servers on Windows.",
-  "icon": "extension-icon.png",
-  "version": "0.2.0",
+  "icon": "nodekill-icon.png",
+  "version": "0.2.1",
   "author": "jrud25",
   "license": "MIT",
   "commands": [

@@ -81,6 +81,58 @@ const COMMON_DEVELOPMENT_PORTS = new Set([
   7000, 8000, 8080, 8081, 8888, 9000,
 ]);
 
+/**
+ * Processes that commonly bind to localhost ports but are NOT development
+ * servers. These are excluded even when they happen to listen on a common
+ * dev port.
+ */
+const IGNORED_PROCESS_NAMES = new Set([
+  "riotclientservices.exe",
+  "riotclientux.exe",
+  "riotclientcrashhandler.exe",
+  "leagueclient.exe",
+  "leagueclientux.exe",
+  "valorant-win64-shipping.exe",
+  "vanguard.exe",
+  "epicwebhelper.exe",
+  "steamwebhelper.exe",
+  "msedgewebview2.exe",
+  "msedge.exe",
+  "chrome.exe",
+  "firefox.exe",
+  "brave.exe",
+  "opera.exe",
+  "svchost.exe",
+  "system",
+  "lsass.exe",
+  "services.exe",
+  "spoolsv.exe",
+  "searchhost.exe",
+  "explorer.exe",
+  "microsoft.servicehub.controller.exe",
+  "servicehub.host.dotnet.x64.exe",
+  "servicehub.identityhost.exe",
+  "servicehub.vsdetouredhost.exe",
+  "servicehub.roslyncodanalysisservice.exe",
+  "servicehub.threadedwaitdialog.exe",
+  "vsls-agent.exe",
+  "devenv.exe",
+  "code.exe",
+  "discord.exe",
+  "spotify.exe",
+  "slack.exe",
+  "teams.exe",
+  "msteams.exe",
+  "onedrive.exe",
+  "dropbox.exe",
+  "nvidia web helper.exe",
+  "sqlservr.exe",
+  "mysqld.exe",
+  "postgres.exe",
+  "mongod.exe",
+  "redis-server.exe",
+]);
+
 type RawWindowsListener = {
   port: number;
   pid: number;
@@ -153,6 +205,10 @@ function toLocalhostServer(listener: RawWindowsListener): LocalhostServer {
 function isLikelyDevelopmentServer(server: LocalhostServer): boolean {
   const processName = server.processName.toLowerCase();
   const commandLine = server.commandLine?.toLowerCase() ?? "";
+
+  if (IGNORED_PROCESS_NAMES.has(processName)) {
+    return false;
+  }
 
   return (
     DEVELOPMENT_PROCESS_NAMES.has(processName) ||
