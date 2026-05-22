@@ -9,4 +9,5 @@ export type LocalhostServer = {
   url: string;
   label: string;
   workingDirectory?: string;
+  projectName?: string;
 };

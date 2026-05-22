@@ -238,9 +238,15 @@ function ServerDetail({ server }: { server: LocalhostServer }) {
             title="Process"
             text={server.processName}
           />
+          {server.projectName ? (
+            <List.Item.Detail.Metadata.Label
+              title="Project"
+              text={server.projectName}
+            />
+          ) : null}
           {server.workingDirectory ? (
             <List.Item.Detail.Metadata.Label
-              title="Project Hint"
+              title="Project Directory"
               text={server.workingDirectory}
             />
           ) : null}

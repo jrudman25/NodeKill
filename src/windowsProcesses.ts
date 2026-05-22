@@ -1,4 +1,6 @@
 import { execFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import type { LocalhostServer } from "./types";
 
@@ -131,6 +133,9 @@ const IGNORED_PROCESS_NAMES = new Set([
   "postgres.exe",
   "mongod.exe",
   "redis-server.exe",
+  "AppleMobileDeviceProcess.exe",
+  "esrv.exe",
+  "language_server_windows_x64.exe"
 ]);
 
 type RawWindowsListener = {
@@ -149,7 +154,7 @@ export async function findLocalhostServers(): Promise<LocalhostServer[]> {
     .map(toLocalhostServer)
     .filter(isLikelyDevelopmentServer);
 
-  return Array.from(
+  const deduplicated = Array.from(
     new Map(servers.map((server) => [server.id, server])).values(),
   ).sort((left, right) => {
     if (left.port !== right.port) {
@@ -158,6 +163,9 @@ export async function findLocalhostServers(): Promise<LocalhostServer[]> {
 
     return left.pid - right.pid;
   });
+
+  await enrichWithProjectNames(deduplicated);
+  return deduplicated;
 }
 
 export async function killProcess(pid: number): Promise<void> {
@@ -187,8 +195,9 @@ function parsePowerShellJson<T>(stdout: string): T[] {
 function toLocalhostServer(listener: RawWindowsListener): LocalhostServer {
   const processName = listener.processName ?? "Unknown process";
   const url = `http://localhost:${listener.port}`;
+  const workingDirectory = inferWorkingDirectory(listener.commandLine);
 
-  return {
+  const server: LocalhostServer = {
     id: `${listener.pid}:${listener.port}`,
     port: listener.port,
     pid: listener.pid,
@@ -197,9 +206,12 @@ function toLocalhostServer(listener: RawWindowsListener): LocalhostServer {
     executablePath: listener.executablePath,
     creationDate: listener.creationDate,
     url,
-    label: buildLabel(listener),
-    workingDirectory: inferWorkingDirectory(listener.commandLine),
+    label: processName,
+    workingDirectory,
   };
+
+  server.label = buildLabel(server);
+  return server;
 }
 
 function isLikelyDevelopmentServer(server: LocalhostServer): boolean {
@@ -217,41 +229,33 @@ function isLikelyDevelopmentServer(server: LocalhostServer): boolean {
   );
 }
 
-function buildLabel(listener: RawWindowsListener): string {
-  const processName = listener.processName ?? "Unknown process";
-  const projectHint = inferProjectHint(listener.commandLine);
-
-  if (projectHint) {
-    return `${projectHint} (${processName})`;
+function buildLabel(server: LocalhostServer): string {
+  const name = server.projectName;
+  if (name) {
+    return `${name} (${server.processName})`;
   }
 
-  return processName;
+  const folderHint = server.workingDirectory
+    ? lastPathSegment(server.workingDirectory)
+    : undefined;
+
+  if (folderHint) {
+    return `${folderHint} (${server.processName})`;
+  }
+
+  return server.processName;
 }
 
-function inferProjectHint(commandLine: string | undefined): string | undefined {
-  if (!commandLine) {
-    return undefined;
-  }
-
-  const packageJsonMatch = commandLine.match(
-    /([A-Z]:\\[^"\s]+(?:\\[^"\s]+)*)\\package\.json/i,
-  );
-
-  if (packageJsonMatch?.[1]) {
-    return lastPathSegment(packageJsonMatch[1]);
-  }
-
-  const cwdMatch = commandLine.match(
-    /--prefix\s+"?([A-Z]:\\[^"\s]+(?:\\[^"\s]+)*)"?/i,
-  );
-
-  if (cwdMatch?.[1]) {
-    return lastPathSegment(cwdMatch[1]);
-  }
-
-  return undefined;
-}
-
+/**
+ * Try to extract the project root directory from the command line.
+ * Matches patterns like:
+ *   - ...\SomeProject\node_modules\.bin\next dev
+ *   - ...\SomeProject\node_modules\vite\bin\vite.js
+ *   - ...\SomeProject\package.json
+ *   - --prefix "C:\Projects\SomeProject"
+ *   - ...\SomeProject\manage.py (Python)
+ *   - ...\SomeProject\server.js
+ */
 function inferWorkingDirectory(
   commandLine: string | undefined,
 ): string | undefined {
@@ -259,19 +263,78 @@ function inferWorkingDirectory(
     return undefined;
   }
 
-  const packageJsonMatch = commandLine.match(
-    /([A-Z]:\\[^"\s]+(?:\\[^"\s]+)*)\\package\.json/i,
+  // Match path\node_modules\... — the parent of node_modules is the project root
+  const nodeModulesMatch = commandLine.match(
+    /"?([A-Z]:\\[^"]*?)\\node_modules\\/i,
   );
+  if (nodeModulesMatch?.[1]) {
+    return nodeModulesMatch[1];
+  }
 
+  // Match an explicit package.json reference
+  const packageJsonMatch = commandLine.match(
+    /"?([A-Z]:\\[^"]*?)\\package\.json/i,
+  );
   if (packageJsonMatch?.[1]) {
     return packageJsonMatch[1];
   }
 
+  // Match --prefix flag (npm)
   const cwdMatch = commandLine.match(
     /--prefix\s+"?([A-Z]:\\[^"\s]+(?:\\[^"\s]+)*)"?/i,
   );
+  if (cwdMatch?.[1]) {
+    return cwdMatch[1];
+  }
 
-  return cwdMatch?.[1];
+  return undefined;
+}
+
+/**
+ * Read the "name" field from a package.json in the given directory.
+ * Returns undefined if the file doesn't exist or can't be parsed.
+ */
+async function readProjectName(
+  directory: string,
+): Promise<string | undefined> {
+  try {
+    const raw = await readFile(join(directory, "package.json"), "utf-8");
+    const pkg = JSON.parse(raw) as { name?: string };
+    return pkg.name || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Enrich servers with project names from package.json where possible,
+ * then rebuild labels to include the project name.
+ */
+async function enrichWithProjectNames(
+  servers: LocalhostServer[],
+): Promise<void> {
+  // Group by working directory to avoid reading the same package.json multiple times
+  const directoryCache = new Map<string, string | undefined>();
+
+  await Promise.all(
+    servers.map(async (server) => {
+      if (!server.workingDirectory) {
+        return;
+      }
+
+      let name = directoryCache.get(server.workingDirectory);
+      if (name === undefined && !directoryCache.has(server.workingDirectory)) {
+        name = await readProjectName(server.workingDirectory);
+        directoryCache.set(server.workingDirectory, name);
+      }
+
+      if (name) {
+        server.projectName = name;
+      }
+
+      server.label = buildLabel(server);
+    }),
+  );
 }
 
 function lastPathSegment(path: string): string {
